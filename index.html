@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineSync Pro - Assista com Amigos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+        
+        body {
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            margin: 0;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .neon-glow {
+            box-shadow: 0 0 30px rgba(102, 126, 234, 0.6);
+        }
+        
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        
+        .participant-video {
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .participant-video::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 12px;
+            padding: 2px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+        
+        .control-btn {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        
+        .chat-message {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .pulse-ring {
+            position: absolute;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        
+        .room-code {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.2em;
+            text-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+        }
+        
+        .connection-status {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 100;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        
+        .online { background: #10b981; box-shadow: 0 0 10px #10b981; }
+        .connecting { background: #f59e0b; animation: blink 1s infinite; }
+        .offline { background: #ef4444; }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        #localVideo, .remote-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .participant-video:hover .video-overlay {
+            opacity: 1;
+        }
+        
+        .progress-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 3px;
+            transition: width 0.1s linear;
+            position: relative;
+        }
+        
+        .progress-handle {
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .progress-bar:hover .progress-handle {
+            opacity: 1;
+        }
+        
+        .floating-emoji {
+            position: fixed;
+            pointer-events: none;
+            animation: floatUp 2s ease-out forwards;
+            z-index: 1000;
+        }
+        
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
+        }
+        
+        .typing-indicator span {
+            animation: typingBounce 1.4s infinite both;
+        }
+        
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typingBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        
+        .youtube-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+        
+        .screen-share-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 10;
+            animation: pulse 2s infinite;
+        }
+        
+        .pause-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            backdrop-filter: blur(5px);
+        }
+        
+        .pause-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            border: 3px solid rgba(255,255,255,0.3);
+        }
+        
+        .pause-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .pause-user {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 8px;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+        
+        .tab-active {
+            border-bottom: 2px solid #667eea;
+            color: #667eea;
+        }
+        
+        .source-btn {
+            transition: all 0.3s;
+        }
+        
+        .source-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        
+        .source-btn.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="connection-status glass-panel px-4 py-2 rounded-full hidden">
+        <span class="status-dot connecting"></span>
+        <span id="statusText" class="text-sm font-medium">Conectando...</span>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="glass-panel border-b border-white/10 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="goHome()">
+                    <div class="relative">
+                        <div class="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg blur opacity-75 animate-pulse"></div>
+                        <div class="relative bg-gray-900 rounded-lg p-2">
+                            <i class="fas fa-play-circle text-2xl text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400"></i>
+                        </div>
+                    </div>
+                    <span class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">CineSync</span>
+                    <span class="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30 font-bold">PRO</span>
+                </div>
+                
+                <div id="roomInfo" class="hidden flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 px-4 py-2 glass-panel rounded-full cursor-pointer hover:bg-white/10 transition-colors" onclick="copyRoomCode()">
+                        <span class="text-gray-400 text-sm">Sala:</span>
+                        <span id="displayRoomCode" class="room-code text-purple-400 font-bold text-lg"></span>
+                        <i class="fas fa-copy text-gray-400 text-xs ml-1"></i>
+                    </div>
+                    <div class="flex items-center space-x-2 glass-panel px-3 py-1 rounded-full">
+                        <span class="status-dot online"></span>
+                        <span id="userCount" class="text-sm text-gray-300 font-medium">1 online</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <button onclick="toggleHelp()" class="p-2 text-gray-400 hover:text-white transition-colors" title="Ajuda">
+                        <i class="fas fa-question-circle text-xl"></i>
+                    </button>
+                    <div class="h-8 w-8 rounded-full gradient-bg p-0.5 cursor-pointer hover:scale-110 transition-transform">
+                        <div class="h-full w-full rounded-full bg-gray-900 flex items-center justify-center text-xs font-bold" id="userAvatar">
+                            EU
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        <!-- Landing Page -->
+        <div id="landingPage" class="text-center py-12">
+            <div class="mb-6 inline-block">
+                <div class="w-28 h-28 mx-auto mb-4 rounded-full gradient-bg flex items-center justify-center relative">
+                    <div class="pulse-ring absolute inset-0 gradient-bg"></div>
+                    <i class="fas fa-play text-4xl text-white relative z-10 ml-1"></i>
+                </div>
+            </div>
+            
+            <h1 class="text-4xl md:text-6xl font-bold mb-4">
+                <span class="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400">Assista Juntos</span>
+                <br>
+                <span class="text-white">Online em Tempo Real</span>
+            </h1>
+            
+            <p class="text-lg text-gray-400 max-w-2xl mx-auto mb-8">
+                YouTube, arquivos locais, compartilhamento de tela e muito mais. 
+                Sincronização perfeita com video chamada.
+            </p>
+            
+            <div class="flex flex-col sm:flex-row justify-center gap-4 max-w-md mx-auto mb-10">
+                <button onclick="createRoom()" class="group relative px-8 py-4 gradient-bg rounded-2xl font-bold text-lg shadow-lg hover:shadow-purple-500/50 transition-all hover:scale-105 overflow-hidden">
+                    <div class="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                    <i class="fas fa-plus-circle mr-2"></i>Criar Sala
+                </button>
+                <button onclick="showJoinModal()" class="px-8 py-4 glass-panel rounded-2xl font-bold text-lg hover:bg-white/10 transition-all hover:scale-105 border border-white/20">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Entrar na Sala
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
+                <div class="glass-panel p-4 rounded-xl text-center border border-white/5">
+                    <i class="fab fa-youtube text-3xl text-red-500 mb-2"></i>
+                    <p class="text-sm font-medium">YouTube</p>
+                </div>
+                <div class="glass-panel p-4 rounded-xl text-center border border-white/5">
+                    <i class="fas fa-file-video text-3xl text-blue-400 mb-2"></i>
+                    <p class="text-sm font-medium">Arquivos</p>
+                </div>
+                <div class="glass-panel p-4 rounded-xl text-center border border-white/5">
+                    <i class="fas fa-desktop text-3xl text-green-400 mb-2"></i>
+                    <p class="text-sm font-medium">Tela</p>
+                </div>
+                <div class="glass-panel p-4 rounded-xl text-center border border-white/5">
+                    <i class="fas fa-video text-3xl text-purple-400 mb-2"></i>
+                    <p class="text-sm font-medium">Video Call</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Room Interface -->
+        <div id="roomInterface" class="hidden space-y-4">
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-140px)] min-h-[500px]">
+                
+                <!-- Video Section -->
+                <div class="lg:col-span-2 flex flex-col space-y-3">
+                    
+                    <!-- Source Selection -->
+                    <div class="glass-panel rounded-xl p-3 flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <button onclick="setVideoSource('file')" id="btnFile" class="source-btn active px-4 py-2 rounded-lg glass-panel border border-white/10 text-sm font-medium flex items-center">
+                            <i class="fas fa-file-video mr-2"></i>Arquivo
+                        </button>
+                        <button onclick="setVideoSource('youtube')" id="btnYoutube" class="source-btn px-4 py-2 rounded-lg glass-panel border border-white/10 text-sm font-medium flex items-center">
+                            <i class="fab fa-youtube mr-2 text-red-500"></i>YouTube
+                        </button>
+                        <button onclick="setVideoSource('screen')" id="btnScreen" class="source-btn px-4 py-2 rounded-lg glass-panel border border-white/10 text-sm font-medium flex items-center">
+                            <i class="fas fa-desktop mr-2 text-green-400"></i>Compartilhar Tela
+                        </button>
+                        <button onclick="showUrlModal()" class="px-4 py-2 rounded-lg glass-panel border border-white/10 text-sm font-medium flex items-center hover:bg-white/5">
+                            <i class="fas fa-link mr-2 text-blue-400"></i>URL
+                        </button>
+                    </div>
+
+                    <!-- Video Player -->
+                    <div class="video-container flex-1 glass-panel neon-glow relative group" id="videoPlayerContainer">
+                        
+                        <!-- Pause Overlay -->
+                        <div id="pauseOverlay" class="pause-overlay hidden">
+                            <div class="pause-icon">
+                                <i class="fas fa-pause text-3xl text-white"></i>
+                            </div>
+                            <div class="pause-text">FILME PAUSADO</div>
+                            <div id="pauseUser" class="pause-user">Por: Host</div>
+                            <button onclick="requestResume()" class="mt-4 px-6 py-2 gradient-bg rounded-full font-bold hover:opacity-90 transition-opacity">
+                                <i class="fas fa-play mr-2"></i>Continuar
+                            </button>
+                        </div>
+
+                        <!-- Screen Share Indicator -->
+                        <div id="screenIndicator" class="screen-share-indicator hidden">
+                            <i class="fas fa-desktop mr-1"></i> Compartilhando Tela
+                        </div>
+
+                        <!-- Video Placeholder -->
+                        <div id="videoPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center p-4">
+                            <div class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-4 animate-pulse">
+                                <i class="fas fa-film text-4xl text-gray-600"></i>
+                            </div>
+                            <p class="text-gray-400 mb-4 text-center">Selecione uma fonte de vídeo</p>
+                            <div class="flex flex-wrap justify-center gap-2">
+                                <input type="file" id="videoInput" accept="video/*" class="hidden" onchange="loadVideo(event)">
+                                <button onclick="document.getElementById('videoInput').click()" class="px-5 py-2.5 gradient-bg rounded-xl font-semibold hover:opacity-90 transition-opacity flex items-center text-sm">
+                                    <i class="fas fa-upload mr-2"></i>Carregar Arquivo
+                                </button>
+                                <button onclick="startScreenShare()" class="px-5 py-2.5 glass-panel rounded-xl font-semibold hover:bg-white/10 transition-colors border border-white/20 flex items-center text-sm">
+                                    <i class="fas fa-desktop mr-2 text-green-400"></i>Compartilhar Tela
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- YouTube Container -->
+                        <div id="youtubeContainer" class="youtube-container hidden">
+                            <div id="youtubePlayer"></div>
+                        </div>
+
+                        <!-- Local Video -->
+                        <video id="mainVideo" class="w-full h-full hidden" playsinline></video>
+                        
+                        <!-- Screen Share Video -->
+                        <video id="screenVideo" class="w-full h-full hidden" playsinline></video>
+
+                        <!-- Loading -->
+                        <div id="loadingOverlay" class="absolute inset-0 bg-black/90 flex items-center justify-center hidden z-30">
+                            <div class="text-center">
+                                <div class="w-14 h-14 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                                <p class="text-purple-400 font-medium text-sm">Sincronizando...</p>
+                            </div>
+                        </div>
+
+                        <!-- Controls -->
+                        <div id="videoControls" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity hidden">
+                            <div class="progress-bar mb-3" onclick="seekVideo(event)">
+                                <div id="progressFill" class="progress-fill" style="width: 0%">
+                                    <div class="progress-handle"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <button onclick="togglePlay()" class="control-btn w-10 h-10 rounded-full gradient-bg flex items-center justify-center text-white shadow-lg">
+                                        <i id="playIcon" class="fas fa-play"></i>
+                                    </button>
+                                    <button onclick="skip(-10)" class="control-btn w-8 h-8 rounded-full glass-panel flex items-center justify-center text-white/80 hover:text-white text-sm">
+                                        <i class="fas fa-backward"></i>
+                                    </button>
+                                    <button onclick="skip(10)" class="control-btn w-8 h-8 rounded-full glass-panel flex items-center justify-center text-white/80 hover:text-white text-sm">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                    
+                                    <!-- Pause for All Button -->
+                                    <button onclick="pauseForEveryone()" id="pauseAllBtn" class="control-btn px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs font-bold flex items-center ml-2" title="Pausar para todos">
+                                        <i class="fas fa-pause mr-1"></i>Todos
+                                    </button>
+                                    
+                                    <div class="flex items-center space-x-1 group/volume ml-2">
+                                        <button onclick="toggleMute()" class="control-btn w-8 h-8 flex items-center justify-center text-white/80 hover:text-white">
+                                            <i id="volumeIcon" class="fas fa-volume-up text-sm"></i>
+                                        </button>
+                                        <input type="range" min="0" max="100" value="100" class="w-0 group-hover/volume:w-16 transition-all h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-purple-500" oninput="setVolume(this.value)">
+                                    </div>
+                                    <span id="timeDisplay" class="text-xs text-white/70 font-mono ml-2 hidden sm:inline">00:00 / 00:00</span>
+                                </div>
+                                
+                                <div class="flex items-center space-x-2">
+                                    <div id="syncStatus" class="hidden sm:flex items-center space-x-1 px-2 py-1 rounded-full bg-green-500/20 text-green-400 text-xs">
+                                        <i class="fas fa-sync-alt text-xs"></i>
+                                        <span>Sincronizado</span>
+                                    </div>
+                                    <button onclick="toggleFullscreen()" class="control-btn w-8 h-8 flex items-center justify-center text-white/80 hover:text-white">
+                                        <i class="fas fa-expand text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Video Info -->
+                    <div class="glass-panel rounded-xl p-3 flex items-center justify-between">
+                        <div class="flex-1 min-w-0 mr-4">
+                            <h2 id="videoTitle" class="text-base font-bold truncate mb-0.5">Nenhum vídeo selecionado</h2>
+                            <p id="videoMeta" class="text-xs text-gray-400">Escolha uma fonte de vídeo para começar</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="toggleLike()" class="p-2.5 rounded-lg glass-panel hover:bg-red-500/20 hover:text-red-400 transition-all group">
+                                <i id="likeIcon" class="far fa-heart text-lg group-hover:scale-110 transition-transform"></i>
+                            </button>
+                            <button onclick="shareRoom()" class="p-2.5 rounded-lg glass-panel hover:bg-blue-500/20 hover:text-blue-400 transition-all" title="Copiar link">
+                                <i class="fas fa-share-alt text-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="flex flex-col space-y-3 h-full overflow-hidden">
+                    
+                    <!-- Video Call -->
+                    <div class="glass-panel rounded-xl p-3 flex-shrink-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="font-semibold text-sm flex items-center">
+                                <i class="fas fa-video mr-2 text-purple-400"></i>
+                                Participantes
+                            </h3>
+                            <div class="flex space-x-1">
+                                <button onclick="toggleCamera()" id="camBtn" class="w-8 h-8 rounded-lg glass-panel hover:bg-white/10 transition-colors text-green-400 flex items-center justify-center text-xs" title="Câmera">
+                                    <i class="fas fa-video"></i>
+                                </button>
+                                <button onclick="toggleMic()" id="micBtn" class="w-8 h-8 rounded-lg glass-panel hover:bg-white/10 transition-colors text-green-400 flex items-center justify-center text-xs" title="Microfone">
+                                    <i class="fas fa-microphone"></i>
+                                </button>
+                                <button onclick="leaveRoom()" class="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center justify-center text-xs" title="Sair">
+                                    <i class="fas fa-phone-slash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="videoGrid" class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                            <div class="participant-video aspect-video relative group active">
+                                <video id="localVideo" autoplay muted playsinline class="remote-video"></video>
+                                <div class="video-overlay flex items-center justify-between">
+                                    <span class="text-xs font-medium text-white/90">Você</span>
+                                    <i id="localMicIcon" class="fas fa-microphone text-xs text-white/70"></i>
+                                </div>
+                                <div id="localVideoOff" class="absolute inset-0 flex items-center justify-center bg-gray-800 hidden">
+                                    <div class="w-12 h-12 rounded-full gradient-bg flex items-center justify-center text-lg font-bold">
+                                        EU
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat -->
+                    <div class="glass-panel rounded-xl flex-1 flex flex-col min-h-0">
+                        <div class="p-3 border-b border-white/10 flex items-center justify-between">
+                            <h3 class="font-semibold text-sm flex items-center">
+                                <i class="fas fa-comments mr-2 text-blue-400"></i>
+                                Chat
+                            </h3>
+                            <span id="typingStatus" class="text-xs text-gray-500 hidden">
+                                <span class="typing-indicator">
+                                    Digitando<span>.</span><span>.</span><span>.</span>
+                                </span>
+                            </span>
+                        </div>
+                        
+                        <div id="chatMessages" class="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+                            <div class="text-center text-xs text-gray-500 my-2">
+                                <span class="bg-white/5 px-3 py-1 rounded-full">Bem-vindo ao chat!</span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-3 border-t border-white/10">
+                            <div class="flex space-x-2 mb-2">
+                                <input type="text" id="chatInput" placeholder="Digite uma mensagem..." 
+                                    class="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
+                                    onkeypress="handleChatKey(event)" oninput="handleTyping()">
+                                <button onclick="sendMessage()" class="px-3 gradient-bg rounded-lg hover:opacity-90 transition-opacity">
+                                    <i class="fas fa-paper-plane text-sm"></i>
+                                </button>
+                            </div>
+                            <div class="flex justify-center space-x-3">
+                                <button onclick="sendReaction('❤️')" class="hover:scale-125 transition-transform">❤️</button>
+                                <button onclick="sendReaction('😂')" class="hover:scale-125 transition-transform">😂</button>
+                                <button onclick="sendReaction('😮')" class="hover:scale-125 transition-transform">😮</button>
+                                <button onclick="sendReaction('👏')" class="hover:scale-125 transition-transform">👏</button>
+                                <button onclick="sendReaction('🔥')" class="hover:scale-125 transition-transform">🔥</button>
+                                <button onclick="sendReaction('🍿')" class="hover:scale-125 transition-transform">🍿</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    
+    <!-- Create Room -->
+    <div id="createModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl p-6 max-w-sm w-full border border-purple-500/30">
+            <div class="text-center">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full gradient-bg flex items-center justify-center relative">
+                    <div class="pulse-ring absolute inset-0 gradient-bg"></div>
+                    <i class="fas fa-door-open text-2xl text-white relative z-10"></i>
+                </div>
+                <h2 class="text-xl font-bold mb-2">Sala Criada!</h2>
+                <p class="text-gray-400 mb-4 text-sm">Compartilhe este código:</p>
+                
+                <div class="bg-black/40 rounded-xl p-4 mb-4 border-2 border-purple-500/50 relative group cursor-pointer" onclick="copyRoomCode()">
+                    <span id="roomCodeDisplay" class="room-code text-3xl font-bold text-purple-400 block"></span>
+                    <p class="text-xs text-gray-500 mt-1">Clique para copiar</p>
+                </div>
+                
+                <div class="space-y-2">
+                    <button onclick="enterRoom()" class="w-full py-3 gradient-bg rounded-xl font-bold hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/30">
+                        Entrar na Sala
+                    </button>
+                    <button onclick="closeCreateModal()" class="w-full py-2.5 glass-panel rounded-xl font-medium hover:bg-white/5 transition-colors text-gray-400 text-sm">
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Room -->
+    <div id="joinModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl p-6 max-w-sm w-full border border-white/10">
+            <div class="text-center">
+                <h2 class="text-xl font-bold mb-2">Entrar na Sala</h2>
+                <p class="text-gray-400 mb-4 text-sm">Digite o código:</p>
+                
+                <input type="text" id="joinCodeInput" placeholder="ABC123" maxlength="6"
+                    class="w-full bg-black/40 border-2 border-white/10 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-widest uppercase focus:outline-none focus:border-purple-500/50 transition-colors mb-4 text-purple-400 placeholder-gray-600"
+                    oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
+                
+                <div class="space-y-2">
+                    <button onclick="joinRoom()" class="w-full py-3 gradient-bg rounded-xl font-bold hover:opacity-90 transition-opacity">
+                        Entrar
+                    </button>
+                    <button onclick="closeJoinModal()" class="w-full py-2.5 glass-panel rounded-xl font-medium hover:bg-white/5 transition-colors text-gray-400 text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- URL Modal -->
+    <div id="urlModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl p-6 max-w-md w-full border border-white/10">
+            <div class="text-center">
+                <h2 class="text-xl font-bold mb-2">Carregar URL</h2>
+                <p class="text-gray-400 mb-4 text-sm">Cole o link do vídeo:</p>
+                
+                <input type="text" id="videoUrlInput" placeholder="https://exemplo.com/video.mp4"
+                    class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500/50 transition-colors mb-4">
+                
+                <div class="space-y-2">
+                    <button onclick="loadFromUrl()" class="w-full py-3 gradient-bg rounded-xl font-bold hover:opacity-90 transition-opacity">
+                        Carregar
+                    </button>
+                    <button onclick="closeUrlModal()" class="w-full py-2.5 glass-panel rounded-xl font-medium hover:bg-white/5 transition-colors text-gray-400 text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- YouTube Modal -->
+    <div id="youtubeModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl p-6 max-w-md w-full border border-white/10">
+            <div class="text-center">
+                <h2 class="text-xl font-bold mb-2"><i class="fab fa-youtube text-red-500 mr-2"></i>YouTube</h2>
+                <p class="text-gray-400 mb-4 text-sm">Cole o link do vídeo:</p>
+                
+                <input type="text" id="youtubeUrlInput" placeholder="https://youtube.com/watch?v=..."
+                    class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500/50 transition-colors mb-4">
+                
+                <div class="space-y-2">
+                    <button onclick="loadYouTube()" class="w-full py-3 gradient-bg rounded-xl font-bold hover:opacity-90 transition-opacity">
+                        <i class="fas fa-play mr-2"></i>Carregar e Sincronizar
+                    </button>
+                    <button onclick="closeYouTubeModal()" class="w-full py-2.5 glass-panel rounded-xl font-medium hover:bg-white/5 transition-colors text-gray-400 text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl p-6 max-w-lg w-full border border-white/10 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Como Usar</h2>
+                <button onclick="toggleHelp()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4 text-sm text-gray-300">
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full gradient-bg flex items-center justify-center flex-shrink-0 font-bold text-xs">1</div>
+                    <div>
+                        <h4 class="font-semibold text-white mb-1">Crie uma Sala</h4>
+                        <p>Clique em "Criar Sala" e compartilhe o código.</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full gradient-bg flex items-center justify-center flex-shrink-0 font-bold text-xs">2</div>
+                    <div>
+                        <h4 class="font-semibold text-white mb-1">Escolha a Fonte</h4>
+                        <p>YouTube, arquivo local, URL ou compartilhamento de tela.</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full gradient-bg flex items-center justify-center flex-shrink-0 font-bold text-xs">3</div>
+                    <div>
+                        <h4 class="font-semibold text-white mb-1">Sincronização</h4>
+                        <p>Use "Pausar Todos" para interromper o filme para todos ao mesmo tempo.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-white/10">
+                <h4 class="font-semibold text-white mb-3">Controles:</h4>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="flex justify-between glass-panel px-3 py-2 rounded-lg">
+                        <span>Espaço</span>
+                        <span class="text-gray-500">Play/Pause</span>
+                    </div>
+                    <div class="flex justify-between glass-panel px-3 py-2 rounded-lg">
+                        <span>Pausar Todos</span>
+                        <span class="text-gray-500">Pausa global</span>
+                    </div>
+                    <div class="flex justify-between glass-panel px-3 py-2 rounded-lg">
+                        <span>F</span>
+                        <span class="text-gray-500">Tela Cheia</span>
+                    </div>
+                    <div class="flex justify-between glass-panel px-3 py-2 rounded-lg">
+                        <span>Setas</span>
+                        <span class="text-gray-500">±10 segundos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <div class="glass-panel px-4 py-3 rounded-xl flex items-center space-x-3 shadow-2xl border border-purple-500/30">
+            <i id="toastIcon" class="fas fa-check-circle text-green-400"></i>
+            <span id="toastMessage" class="font-medium text-sm">Notificação</span>
+        </div>
+    </div>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        // Firebase Configuration - Replace with your own for production
+        const firebaseConfig = {
+            apiKey: "AIzaSyDemoKeyForCineSync123456789",
+            authDomain: "cinesync-demo.firebaseapp.com",
+            databaseURL: "https://cinesync-demo-default-rtdb.firebaseio.com",
+            projectId: "cinesync-demo",
+            storageBucket: "cinesync-demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef123456"
+        };
+
+        // Initialize Firebase
+        let app, database, roomRef, videoRef, chatRef, presenceRef;
+        let firebaseConnected = false;
+        
+        try {
+            app = firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            firebaseConnected = true;
+        } catch (e) {
+            console.log("Firebase init error, using fallback:", e);
+            // Will use localStorage fallback
+        }
+
+        // Global Variables
+        let currentRoom = null;
+        let userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        let userName = 'Anônimo';
+        let localStream = null;
+        let screenStream = null;
+        let isCameraOn = true;
+        let isMicOn = true;
+        let isHost = false;
+        let currentVideoSource = 'file';
+        let youtubePlayer = null;
+        let isPausedByHost = false;
+        let pausedByUser = null;
+        let syncInterval = null;
+        let lastSyncTime = 0;
+
+        // DOM Elements
+        const localVideo = document.getElementById('localVideo');
+        const mainVideo = document.getElementById('mainVideo');
+        const screenVideo = document.getElementById('screenVideo');
+        const videoGrid = document.getElementById('videoGrid');
+        const chatMessages = document.getElementById('chatMessages');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initLocalStream();
+            setupDragAndDrop();
+            
+            // Check URL params
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomCode = urlParams.get('room');
+            if (roomCode) {
+                document.getElementById('joinCodeInput').value = roomCode;
+                setTimeout(() => showJoinModal(), 500);
+            }
+        });
+
+        // Initialize Media
+        async function initLocalStream() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' },
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
+                localVideo.srcObject = localStream;
+            } catch (err) {
+                console.error('Camera error:', err);
+                localVideo.style.display = 'none';
+                document.getElementById('localVideoOff').classList.remove('hidden');
+            }
+        }
+
+        // Firebase / Sync Setup
+        function setupSyncListeners() {
+            if (!firebaseConnected || !currentRoom) return;
+            
+            roomRef = database.ref(`rooms/${currentRoom}`);
+            videoRef = roomRef.child('video');
+            chatRef = roomRef.child('chat');
+            presenceRef = roomRef.child('presence');
+            
+            // Video sync listener - CRITICAL
+            videoRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data) return;
+                
+                // Ignore own updates
+                if (data.userId === userId) return;
+                
+                handleRemoteVideoState(data);
+            });
+            
+            // Chat listener
+            chatRef.on('child_added', (snapshot) => {
+                const msg = snapshot.val();
+                if (msg.userId !== userId) {
+                    if (msg.type === 'reaction') {
+                        createFloatingEmoji(msg.text);
+                    }
+                    addChatMessage(msg.name, msg.text, false, msg.timestamp);
+                }
+            });
+            
+            // Presence
+            presenceRef.child(userId).set({
+                name: userName,
+                online: true,
+                lastSeen: Date.now()
+            });
+            
+            presenceRef.child(userId).onDisconnect().remove();
+            
+            presenceRef.on('value', (snapshot) => {
+                const users = snapshot.val() || {};
+                const count = Object.keys(users).length;
+                document.getElementById('userCount').textContent = `${count} online`;
+            });
+        }
+
+        function handleRemoteVideoState(data) {
+            const now = Date.now();
+            const latency = (now - data.timestamp) / 1000; // seconds
+            
+            switch(data.action) {
+                case 'play':
+                    isPausedByHost = false;
+                    hidePauseOverlay();
+                    syncPlay(data.currentTime + latency);
+                    break;
+                    
+                case 'pause':
+                    isPausedByHost = true;
+                    pausedByUser = data.userName;
+                    syncPause(data.currentTime);
+                    showPauseOverlay(data.userName);
+                    break;
+                    
+                case 'seek':
+                    syncSeek(data.currentTime);
+                    break;
+                    
+                case 'load':
+                    if (data.source === 'youtube') {
+                        loadYouTubeVideo(data.videoId, false);
+                    } else if (data.source === 'url') {
+                        setupVideo(data.url, 'Vídeo externo', false);
+                    }
+                    break;
+                    
+                case 'screen':
+                    if (data.active) {
+                        showToast(`${data.userName} está compartilhando tela`, 'info');
+                    }
+                    break;
+            }
+        }
+
+        function syncPlay(targetTime) {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const current = youtubePlayer.getCurrentTime();
+                if (Math.abs(current - targetTime) > 2) {
+                    youtubePlayer.seekTo(targetTime, true);
+                }
+                youtubePlayer.playVideo();
+            } else if (mainVideo.src) {
+                if (Math.abs(mainVideo.currentTime - targetTime) > 2) {
+                    mainVideo.currentTime = targetTime;
+                }
+                mainVideo.play();
+            } else if (screenVideo.src) {
+                screenVideo.play();
+            }
+            
+            updatePlayButton(true);
+        }
+
+        function syncPause(currentTime) {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                youtubePlayer.seekTo(currentTime, true);
+                youtubePlayer.pauseVideo();
+            } else if (mainVideo.src) {
+                mainVideo.currentTime = currentTime;
+                mainVideo.pause();
+            } else if (screenVideo.src) {
+                screenVideo.pause();
+            }
+            
+            updatePlayButton(false);
+        }
+
+        function syncSeek(targetTime) {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                youtubePlayer.seekTo(targetTime, true);
+            } else if (mainVideo.src) {
+                mainVideo.currentTime = targetTime;
+            }
+        }
+
+        // Broadcast functions
+        function broadcastVideoAction(action, currentTime) {
+            if (!firebaseConnected || !videoRef) {
+                // Fallback: localStorage for same-machine testing
+                localStorage.setItem(`cinesync_${currentRoom}_video`, JSON.stringify({
+                    action, currentTime, userId, userName, timestamp: Date.now()
+                }));
+                return;
+            }
+            
+            videoRef.set({
+                action: action,
+                currentTime: currentTime,
+                userId: userId,
+                userName: userName,
+                timestamp: Date.now()
+            });
+        }
+
+        function broadcastChat(text, type = 'text') {
+            if (!firebaseConnected || !chatRef) {
+                // Local fallback
+                return;
+            }
+            
+            chatRef.push({
+                userId: userId,
+                name: userName,
+                text: text,
+                type: type,
+                timestamp: Date.now()
+            });
+        }
+
+        // Video Source Selection
+        function setVideoSource(source) {
+            currentVideoSource = source;
+            
+            // Update UI
+            document.querySelectorAll('.source-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById('btn' + source.charAt(0).toUpperCase() + source.slice(1))?.classList.add('active');
+            
+            // Handle specific sources
+            if (source === 'youtube') {
+                document.getElementById('youtubeModal').classList.remove('hidden');
+                document.getElementById('youtubeModal').classList.add('flex');
+            } else if (source === 'screen') {
+                startScreenShare();
+            }
+        }
+
+        // YouTube Integration
+        function onYouTubeIframeAPIReady() {
+            // API ready
+        }
+
+        function loadYouTube() {
+            const url = document.getElementById('youtubeUrlInput').value.trim();
+            const videoId = extractYouTubeId(url);
+            
+            if (!videoId) {
+                showToast('Link do YouTube inválido', 'error');
+                return;
+            }
+            
+            loadYouTubeVideo(videoId, true);
+            closeYouTubeModal();
+        }
+
+        function extractYouTubeId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        function loadYouTubeVideo(videoId, broadcast = true) {
+            currentVideoSource = 'youtube';
+            
+            // Hide others
+            document.getElementById('videoPlaceholder').classList.add('hidden');
+            mainVideo.classList.add('hidden');
+            screenVideo.classList.add('hidden');
+            document.getElementById('youtubeContainer').classList.remove('hidden');
+            document.getElementById('videoControls').classList.remove('hidden');
+            document.getElementById('screenIndicator').classList.add('hidden');
+            
+            // Update UI
+            document.getElementById('videoTitle').textContent = 'YouTube Video';
+            document.getElementById('videoMeta').textContent = 'Sincronização ativa • ID: ' + videoId;
+            
+            // Create or update player
+            if (youtubePlayer) {
+                youtubePlayer.loadVideoById(videoId);
+            } else {
+                youtubePlayer = new YT.Player('youtubePlayer', {
+                    height: '100%',
+                    width: '100%',
+                    videoId: videoId,
+                    playerVars: {
+                        autoplay: 0,
+                        controls: 0,
+                        disablekb: 1,
+                        enablejsapi: 1,
+                        modestbranding: 1,
+                        rel: 0
+                    },
+                    events: {
+                        onReady: (event) => {
+                            event.target.playVideo();
+                        },
+                        onStateChange: (event) => {
+                            if (event.data === YT.PlayerState.PLAYING) {
+                                updatePlayButton(true);
+                                if (broadcast) broadcastVideoAction('play', youtubePlayer.getCurrentTime());
+                            } else if (event.data === YT.PlayerState.PAUSED) {
+                                updatePlayButton(false);
+                                if (broadcast) broadcastVideoAction('pause', youtubePlayer.getCurrentTime());
+                            }
+                        }
+                    }
+                });
+            }
+            
+            if (broadcast) {
+                broadcastVideoAction('load', 0);
+                if (videoRef) videoRef.child('videoId').set(videoId);
+            }
+            
+            showToast('YouTube carregado!', 'success');
+        }
+
+        function closeYouTubeModal() {
+            document.getElementById('youtubeModal').classList.add('hidden');
+            document.getElementById('youtubeModal').classList.remove('flex');
+        }
+
+        // Screen Share
+        async function startScreenShare() {
+            try {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "always" },
+                    audio: true
+                });
+                
+                currentVideoSource = 'screen';
+                
+                // Hide others
+                document.getElementById('videoPlaceholder').classList.add('hidden');
+                mainVideo.classList.add('hidden');
+                document.getElementById('youtubeContainer').classList.add('hidden');
+                screenVideo.classList.remove('hidden');
+                document.getElementById('videoControls').classList.remove('hidden');
+                document.getElementById('screenIndicator').classList.remove('hidden');
+                
+                screenVideo.srcObject = screenStream;
+                screenVideo.play();
+                
+                document.getElementById('videoTitle').textContent = 'Compartilhamento de Tela';
+                document.getElementById('videoMeta').textContent = 'Você está compartilhando sua tela';
+                
+                // Update active button
+                document.querySelectorAll('.source-btn').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('btnScreen').classList.add('active');
+                
+                // Broadcast
+                broadcastVideoAction('screen', 0);
+                if (videoRef) {
+                    videoRef.child('screen').set({
+                        active: true,
+                        userId: userId,
+                        userName: userName
+                    });
+                }
+                
+                screenStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+                
+                showToast('Tela compartilhada!', 'success');
+                
+            } catch (err) {
+                console.error('Screen share error:', err);
+                showToast('Erro ao compartilhar tela', 'error');
+            }
+        }
+
+        function stopScreenShare() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+            
+            screenVideo.srcObject = null;
+            screenVideo.classList.add('hidden');
+            document.getElementById('screenIndicator').classList.add('hidden');
+            
+            // Reset to placeholder
+            document.getElementById('videoPlaceholder').classList.remove('hidden');
+            document.getElementById('videoControls').classList.add('hidden');
+            
+            document.getElementById('videoTitle').textContent = 'Nenhum vídeo selecionado';
+            document.getElementById('videoMeta').textContent = 'Escolha uma fonte de vídeo';
+            
+            // Reset button
+            document.getElementById('btnScreen').classList.remove('active');
+            
+            if (videoRef) {
+                videoRef.child('screen').set({ active: false });
+            }
+        }
+
+        // Local File Video
+        function loadVideo(event) {
+            const file = event.target.files[0];
+            if (!file || !file.type.startsWith('video/')) {
+                showToast('Arquivo inválido', 'error');
+                return;
+            }
+            
+            const url = URL.createObjectURL(file);
+            setupVideo(url, file.name, true);
+            
+            // Reset button state
+            document.querySelectorAll('.source-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btnFile').classList.add('active');
+        }
+
+        function setupVideo(url, name, broadcast = true) {
+            currentVideoSource = 'file';
+            
+            // Hide others
+            document.getElementById('videoPlaceholder').classList.add('hidden');
+            document.getElementById('youtubeContainer').classList.add('hidden');
+            screenVideo.classList.add('hidden');
+            mainVideo.classList.remove('hidden');
+            document.getElementById('videoControls').classList.remove('hidden');
+            document.getElementById('screenIndicator').classList.add('hidden');
+            
+            mainVideo.src = url;
+            document.getElementById('videoTitle').textContent = name.replace(/\.[^/.]+$/, "");
+            document.getElementById('videoMeta').textContent = 'Sincronização ativa • Todos veem o mesmo momento';
+            
+            mainVideo.onloadedmetadata = () => {
+                updateTimeDisplay();
+                if (broadcast) {
+                    broadcastVideoAction('load', 0);
+                    if (videoRef) {
+                        videoRef.child('source').set('file');
+                        videoRef.child('url').set(url);
+                    }
+                }
+            };
+            
+            mainVideo.ontimeupdate = () => {
+                updateProgressBar();
+                updateTimeDisplay();
+            };
+            
+            mainVideo.onplay = () => {
+                updatePlayButton(true);
+                if (!isPausedByHost) broadcastVideoAction('play', mainVideo.currentTime);
+            };
+            
+            mainVideo.onpause = () => {
+                updatePlayButton(false);
+                if (!isPausedByHost) broadcastVideoAction('pause', mainVideo.currentTime);
+            };
+            
+            showToast('Vídeo carregado!', 'success');
+            addSystemMessage('Novo vídeo adicionado');
+            
+            // Auto play
+            setTimeout(() => mainVideo.play(), 500);
+        }
+
+        function showUrlModal() {
+            document.getElementById('urlModal').classList.remove('hidden');
+            document.getElementById('urlModal').classList.add('flex');
+        }
+
+        function closeUrlModal() {
+            document.getElementById('urlModal').classList.add('hidden');
+            document.getElementById('urlModal').classList.remove('flex');
+        }
+
+        function loadFromUrl() {
+            const url = document.getElementById('videoUrlInput').value.trim();
+            if (!url) {
+                showToast('URL inválida', 'error');
+                return;
+            }
+            setupVideo(url, 'Vídeo externo', true);
+            closeUrlModal();
+        }
+
+        // Pause for Everyone (Host Feature)
+        function pauseForEveryone() {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const currentTime = youtubePlayer.getCurrentTime();
+                youtubePlayer.pauseVideo();
+                broadcastVideoAction('pause', currentTime);
+            } else if (mainVideo.src) {
+                mainVideo.pause();
+                broadcastVideoAction('pause', mainVideo.currentTime);
+            } else if (screenVideo.src) {
+                screenVideo.pause();
+                broadcastVideoAction('pause', screenVideo.currentTime);
+            }
+            
+            isPausedByHost = true;
+            pausedByUser = userName;
+            showPauseOverlay(userName);
+            showToast('Vídeo pausado para todos!', 'success');
+        }
+
+        function requestResume() {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                broadcastVideoAction('play', youtubePlayer.getCurrentTime());
+                youtubePlayer.playVideo();
+            } else if (mainVideo.src) {
+                broadcastVideoAction('play', mainVideo.currentTime);
+                mainVideo.play();
+            } else if (screenVideo.src) {
+                broadcastVideoAction('play', screenVideo.currentTime);
+                screenVideo.play();
+            }
+            
+            hidePauseOverlay();
+            showToast('Continuando...', 'success');
+        }
+
+        function showPauseOverlay(user) {
+            document.getElementById('pauseOverlay').classList.remove('hidden');
+            document.getElementById('pauseUser').textContent = `Por: ${user}`;
+        }
+
+        function hidePauseOverlay() {
+            document.getElementById('pauseOverlay').classList.add('hidden');
+            isPausedByHost = false;
+        }
+
+        // Player Controls
+        function togglePlay() {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const state = youtubePlayer.getPlayerState();
+                if (state === YT.PlayerState.PLAYING) {
+                    youtubePlayer.pauseVideo();
+                } else {
+                    youtubePlayer.playVideo();
+                }
+            } else if (mainVideo.src) {
+                if (mainVideo.paused) mainVideo.play();
+                else mainVideo.pause();
+            } else if (screenVideo.src) {
+                if (screenVideo.paused) screenVideo.play();
+                else screenVideo.pause();
+            }
+        }
+
+        function updatePlayButton(playing) {
+            document.getElementById('playIcon').className = playing ? 'fas fa-pause' : 'fas fa-play';
+        }
+
+        function skip(seconds) {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const newTime = youtubePlayer.getCurrentTime() + seconds;
+                youtubePlayer.seekTo(newTime, true);
+                broadcastVideoAction('seek', newTime);
+            } else if (mainVideo.src) {
+                mainVideo.currentTime += seconds;
+                broadcastVideoAction('seek', mainVideo.currentTime);
+            }
+        }
+
+        function seekVideo(event) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            const pos = (event.clientX - rect.left) / rect.width;
+            
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const duration = youtubePlayer.getDuration();
+                const newTime = pos * duration;
+                youtubePlayer.seekTo(newTime, true);
+                broadcastVideoAction('seek', newTime);
+            } else if (mainVideo.src) {
+                mainVideo.currentTime = pos * mainVideo.duration;
+                broadcastVideoAction('seek', mainVideo.currentTime);
+            }
+        }
+
+        function setVolume(value) {
+            const volume = value / 100;
+            
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                youtubePlayer.setVolume(value);
+            } else if (mainVideo.src) {
+                mainVideo.volume = volume;
+            } else if (screenVideo.src) {
+                screenVideo.volume = volume;
+            }
+            
+            const icon = document.getElementById('volumeIcon');
+            if (value == 0) icon.className = 'fas fa-volume-mute';
+            else if (value < 50) icon.className = 'fas fa-volume-down';
+            else icon.className = 'fas fa-volume-up';
+        }
+
+        function toggleMute() {
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const isMuted = youtubePlayer.isMuted();
+                if (isMuted) youtubePlayer.unMute();
+                else youtubePlayer.mute();
+                document.getElementById('volumeIcon').className = isMuted ? 'fas fa-volume-up' : 'fas fa-volume-mute text-red-400';
+            } else if (mainVideo.src) {
+                mainVideo.muted = !mainVideo.muted;
+                document.getElementById('volumeIcon').className = mainVideo.muted ? 'fas fa-volume-mute text-red-400' : 'fas fa-volume-up';
+            }
+        }
+
+        function toggleFullscreen() {
+            const container = document.getElementById('videoPlayerContainer');
+            if (!document.fullscreenElement) {
+                container.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function updateProgressBar() {
+            let percent = 0;
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                const current = youtubePlayer.getCurrentTime();
+                const duration = youtubePlayer.getDuration();
+                percent = (current / duration) * 100;
+            } else if (mainVideo.src) {
+                percent = (mainVideo.currentTime / mainVideo.duration) * 100;
+            }
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function updateTimeDisplay() {
+            let current, total;
+            if (currentVideoSource === 'youtube' && youtubePlayer) {
+                current = formatTime(youtubePlayer.getCurrentTime());
+                total = formatTime(youtubePlayer.getDuration());
+            } else if (mainVideo.src) {
+                current = formatTime(mainVideo.currentTime);
+                total = formatTime(mainVideo.duration);
+            } else {
+                current = '00:00';
+                total = '00:00';
+            }
+            document.getElementById('timeDisplay').textContent = `${current} / ${total}`;
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '00:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Media Controls
+        function toggleCamera() {
+            if (!localStream) return;
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = !videoTrack.enabled;
+                isCameraOn = videoTrack.enabled;
+                
+                const btn = document.getElementById('camBtn');
+                if (isCameraOn) {
+                    btn.classList.remove('text-red-400');
+                    btn.classList.add('text-green-400');
+                    localVideo.style.display = 'block';
+                    document.getElementById('localVideoOff').classList.add('hidden');
+                } else {
+                    btn.classList.remove('text-green-400');
+                    btn.classList.add('text-red-400');
+                    localVideo.style.display = 'none';
+                    document.getElementById('localVideoOff').classList.remove('hidden');
+                }
+            }
+        }
+
+        function toggleMic() {
+            if (!localStream) return;
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                isMicOn = audioTrack.enabled;
+                
+                const btn = document.getElementById('micBtn');
+                const icon = document.getElementById('localMicIcon');
+                
+                if (isMicOn) {
+                    btn.classList.remove('text-red-400');
+                    btn.classList.add('text-green-400');
+                    icon.className = 'fas fa-microphone text-xs text-white/70';
+                } else {
+                    btn.classList.remove('text-green-400');
+                    btn.classList.add('text-red-400');
+                    icon.className = 'fas fa-microphone-slash text-xs text-red-400';
+                }
+            }
+        }
+
+        // Chat Functions
+        function handleChatKey(event) {
+            if (event.key === 'Enter') sendMessage();
+        }
+
+        let typingTimeout = null;
+        function handleTyping() {
+            clearTimeout(typingTimeout);
+            document.getElementById('typingStatus').classList.remove('hidden');
+            typingTimeout = setTimeout(() => {
+                document.getElementById('typingStatus').classList.add('hidden');
+            }, 1000);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            addChatMessage('Você', text, true);
+            input.value = '';
+            document.getElementById('typingStatus').classList.add('hidden');
+            
+            broadcastChat(text, 'text');
+        }
+
+        function sendReaction(emoji) {
+            addChatMessage('Você', emoji, true);
+            createFloatingEmoji(emoji);
+            broadcastChat(emoji, 'reaction');
+        }
+
+        function createFloatingEmoji(emoji) {
+            const el = document.createElement('div');
+            el.className = 'floating-emoji';
+            el.textContent = emoji;
+            el.style.left = Math.random() * 70 + 15 + '%';
+            el.style.top = '50%';
+            el.style.fontSize = '2rem';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2000);
+        }
+
+        function addChatMessage(sender, text, isMe, timestamp = Date.now()) {
+            const div = document.createElement('div');
+            div.className = 'chat-message flex items-start space-x-2';
+            
+            const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const bgClass = isMe ? 'from-purple-500 to-pink-500' : 'from-blue-500 to-cyan-500';
+            const textClass = isMe ? 'text-purple-400' : 'text-blue-400';
+            
+            div.innerHTML = `
+                <div class="w-7 h-7 rounded-full bg-gradient-to-r ${bgClass} flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    ${sender.charAt(0).toUpperCase()}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline space-x-2">
+                        <span class="text-xs font-semibold ${textClass}">${sender}</span>
+                        <span class="text-xs text-gray-600">${time}</span>
+                    </div>
+                    <p class="text-sm text-gray-200 break-words">${escapeHtml(text)}</p>
+                </div>
+            `;
+            
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addSystemMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'flex justify-center my-2';
+            div.innerHTML = `<span class="text-xs text-gray-500 bg-white/5 px-3 py-1 rounded-full">${text}</span>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Room Management
+        function createRoom() {
+            const code = generateRoomCode();
+            document.getElementById('roomCodeDisplay').textContent = code;
+            document.getElementById('createModal').classList.remove('hidden');
+            document.getElementById('createModal').classList.add('flex');
+        }
+
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function showJoinModal() {
+            document.getElementById('joinModal').classList.remove('hidden');
+            document.getElementById('joinModal').classList.add('flex');
+            setTimeout(() => document.getElementById('joinCodeInput').focus(), 100);
+        }
+
+        function closeCreateModal() {
+            document.getElementById('createModal').classList.add('hidden');
+            document.getElementById('createModal').classList.remove('flex');
+        }
+
+        function closeJoinModal() {
+            document.getElementById('joinModal').classList.add('hidden');
+            document.getElementById('joinModal').classList.remove('flex');
+        }
+
+        function enterRoom() {
+            const code = document.getElementById('roomCodeDisplay').textContent;
+            closeCreateModal();
+            startRoom(code, true);
+        }
+
+        function joinRoom() {
+            const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+            if (code.length < 4) {
+                showToast('Código inválido', 'error');
+                return;
+            }
+            closeJoinModal();
+            startRoom(code, false);
+        }
+
+        function startRoom(code, creator) {
+            currentRoom = code;
+            isHost = creator;
+            
+            document.getElementById('landingPage').classList.add('hidden');
+            document.getElementById('roomInterface').classList.remove('hidden');
+            document.getElementById('roomInfo').classList.remove('hidden');
+            document.getElementById('displayRoomCode').textContent = code;
+            
+            window.history.pushState({}, '', `?room=${code}`);
+            
+            // Setup sync
+            setupSyncListeners();
+            
+            // Fallback sync using localStorage for testing
+            setupLocalStorageSync();
+            
+            showToast(creator ? 'Sala criada!' : 'Entrou na sala!', 'success');
+            addSystemMessage(creator ? 'Você criou a sala' : 'Você entrou na sala');
+        }
+
+        // LocalStorage fallback for same-machine testing
+        function setupLocalStorageSync() {
+            if (firebaseConnected) return;
+            
+            // Use localStorage as fallback
+            window.addEventListener('storage', (e) => {
+                if (e.key === `cinesync_${currentRoom}_video`) {
+                    const data = JSON.parse(e.newValue);
+                    if (data.userId !== userId) {
+                        handleRemoteVideoState(data);
+                    }
+                }
+            });
+            
+            showToast('Modo offline: sincronização local apenas', 'warning');
+        }
+
+        function leaveRoom() {
+            if (confirm('Sair da sala?')) {
+                if (roomRef) roomRef.off();
+                window.location.href = window.location.pathname;
+            }
+        }
+
+        function goHome() {
+            if (currentRoom && confirm('Sair da sala atual?')) {
+                if (roomRef) roomRef.off();
+                window.location.href = window.location.pathname;
+            }
+        }
+
+        // Utilities
+        function copyRoomCode() {
+            navigator.clipboard.writeText(currentRoom).then(() => {
+                showToast('Código copiado!', 'success');
+            });
+        }
+
+        function shareRoom() {
+            const url = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
+            navigator.clipboard.writeText(url).then(() => {
+                showToast('Link copiado!', 'success');
+            });
+        }
+
+        function toggleLike() {
+            const icon = document.getElementById('likeIcon');
+            if (icon.classList.contains('far')) {
+                icon.classList.remove('far');
+                icon.classList.add('fas', 'text-red-500');
+                createFloatingEmoji('❤️');
+            } else {
+                icon.classList.remove('fas', 'text-red-500');
+                icon.classList.add('far');
+            }
+        }
+
+        function toggleHelp() {
+            const modal = document.getElementById('helpModal');
+            modal.classList.toggle('hidden');
+            modal.classList.toggle('flex');
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toastIcon');
+            const msg = document.getElementById('toastMessage');
+            
+            msg.textContent = message;
+            
+            if (type === 'success') icon.className = 'fas fa-check-circle text-green-400';
+            else if (type === 'error') icon.className = 'fas fa-exclamation-circle text-red-400';
+            else if (type === 'warning') icon.className = 'fas fa-exclamation-triangle text-yellow-400';
+            else icon.className = 'fas fa-info-circle text-blue-400';
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('videoPlaceholder');
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            });
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('border-2', 'border-purple-500', 'border-dashed');
+                });
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('border-2', 'border-purple-500', 'border-dashed');
+                });
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type.startsWith('video/')) {
+                    loadVideo({ target: { files: files } });
+                }
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            
+            switch(e.code) {
+                case 'Space':
+                    e.preventDefault();
+                    togglePlay();
+                    break;
+                case 'ArrowLeft':
+                    skip(-10);
+                    break;
+                case 'ArrowRight':
+                    skip(10);
+                    break;
+                case 'KeyF':
+                    toggleFullscreen();
+                    break;
+                case 'KeyM':
+                    toggleMic();
+                    break;
+                case 'KeyC':
+                    toggleCamera();
+                    break;
+            }
+        });
+
+        // Keep screen on
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').catch(() => {});
+        }
+    </script>
+</body>
+</html>
